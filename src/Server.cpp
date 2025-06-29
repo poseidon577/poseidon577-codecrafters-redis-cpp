@@ -60,15 +60,19 @@ void handle_client(int client_fd)
         std::vector<std::string> parts = parse_resp(full_msg);
 
         if (!parts.empty()) {
-            if (parts[0] == "ECHO" && parts.size() == 2) {
-                const std::string& message = parts[1];
-                std::string response = "$" + std::to_string(message.size()) + "\r\n" + message + "\r\n";
-                send(client_fd, response.c_str(), response.size(), 0);
-            } else {
-                std::string error = "-ERR unknown command\r\n";
-                send(client_fd, error.c_str(), error.size(), 0);
-            }
-        }
+    if (parts[0] == "ECHO" && parts.size() == 2) {
+        const std::string& message = parts[1];
+        std::string response = "$" + std::to_string(message.size()) + "\r\n" + message + "\r\n";
+        send(client_fd, response.c_str(), response.size(), 0);
+    } else if (parts[0] == "PING") {
+        std::string response = "+PONG\r\n";
+        send(client_fd, response.c_str(), response.size(), 0);
+    } else {
+        std::string error = "-ERR unknown command\r\n";
+        send(client_fd, error.c_str(), error.size(), 0);
+    }
+}
+
 
         full_msg.clear();  // Reset to allow new command in next recv()
     }
