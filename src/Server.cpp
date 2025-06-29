@@ -17,6 +17,9 @@ void handle_client(int client_fd)
     std::string full_msg;
     int bytes_received;
 
+    static std::unordered_map<std::string, std::string> kv_store;
+    static std::mutex kv_mutex;
+
     std::cout << "Waiting for RESP input...\n";
 
     auto parse_resp = [](const std::string& input) -> std::vector<std::string> {
@@ -60,25 +63,38 @@ void handle_client(int client_fd)
         std::vector<std::string> parts = parse_resp(full_msg);
 
         if (!parts.empty()) {
-    if (parts[0] == "ECHO" && parts.size() == 2) {
-        const std::string& message = parts[1];
-        std::string response = "$" + std::to_string(message.size()) + "\r\n" + message + "\r\n";
-        send(client_fd, response.c_str(), response.size(), 0);
-    } else if (parts[0] == "PING") {
-        std::string response = "+PONG\r\n";
-        send(client_fd, response.c_str(), response.size(), 0);
-    } else {
-        std::string error = "-ERR unknown command\r\n";
-        send(client_fd, error.c_str(), error.size(), 0);
-    }
-}
+            std::string response;
+            if (parts[0] == "PING") {
+                response = "+PONG\r\n";
+            } else if (parts[0] == "ECHO" && parts.size() == 2) {
+                const std::string& message = parts[1];
+                response = "$" + std::to_string(message.size()) + "\r\n" + message + "\r\n";
+            } else if (parts[0] == "SET" && parts.size() == 3) {
+                std::lock_guard<std::mutex> lock(kv_mutex);
+                kv_store[parts[1]] = parts[2];
+                response = "+OK\r\n";
+            } else if (parts[0] == "GET" && parts.size() == 2) {
+                std::lock_guard<std::mutex> lock(kv_mutex);
+                auto it = kv_store.find(parts[1]);
+                if (it != kv_store.end()) {
+                    const std::string& val = it->second;
+                    response = "$" + std::to_string(val.size()) + "\r\n" + val + "\r\n";
+                } else {
+                    response = "$-1\r\n";  // Null bulk string
+                }
+            } else {
+                response = "-ERR unknown command\r\n";
+            }
 
+            send(client_fd, response.c_str(), response.size(), 0);
+        }
 
-        full_msg.clear();  // Reset to allow new command in next recv()
+        full_msg.clear();  // Ready for next command
     }
 
     close(client_fd);
 }
+
 
 int main(int argc, char **argv) {
   std::cout << std::unitbuf;
