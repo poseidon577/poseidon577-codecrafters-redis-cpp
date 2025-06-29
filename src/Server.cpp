@@ -51,7 +51,7 @@ int main(int argc, char **argv) {
   char buffer[1024];
   std::string full_msg;
   int bytes_received;
-
+  std::cout << "Waiting for RESP input...\n";
   while ((bytes_received = recv(client_fd, buffer, sizeof(buffer) - 1, 0)) > 0) {
     buffer[bytes_received] = '\0';
     full_msg += buffer;
