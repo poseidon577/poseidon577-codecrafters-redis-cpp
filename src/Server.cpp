@@ -13,36 +13,68 @@
 
 void handle_client(int client_fd)
 {
-  char buffer[1024];
-  std::string full_msg;
-  int bytes_received;
-  std::cout << "Waiting for RESP input...\n";
-  while ((bytes_received = recv(client_fd, buffer, sizeof(buffer) - 1, 0)) > 0) {
-    buffer[bytes_received] = '\0';
-    full_msg += buffer;
+    char buffer[1024];
+    std::string full_msg;
+    int bytes_received;
 
-    // Count how many times "PING" appears
-    size_t count = 0;
-    size_t pos = 0;
-    while ((pos = full_msg.find("PING", pos)) != std::string::npos) {
-      ++count;
-      pos += 4;
+    std::cout << "Waiting for RESP input...\n";
+
+    auto parse_resp = [](const std::string& input) -> std::vector<std::string> {
+        std::vector<std::string> result;
+        size_t pos = 0;
+
+        if (pos >= input.size() || input[pos] != '*') return result;
+        ++pos;
+
+        size_t end = input.find("\r\n", pos);
+        if (end == std::string::npos) return result;
+
+        int array_len = std::stoi(input.substr(pos, end - pos));
+        pos = end + 2;
+
+        for (int i = 0; i < array_len; ++i) {
+            if (pos >= input.size() || input[pos] != '$') return result;
+            ++pos;
+
+            end = input.find("\r\n", pos);
+            if (end == std::string::npos) return result;
+
+            int len = std::stoi(input.substr(pos, end - pos));
+            pos = end + 2;
+
+            if (pos + len > input.size()) return result;
+            std::string value = input.substr(pos, len);
+            result.push_back(value);
+            pos += len + 2; // Skip value and following \r\n
+        }
+
+        return result;
+    };
+
+    while ((bytes_received = recv(client_fd, buffer, sizeof(buffer) - 1, 0)) > 0) {
+        buffer[bytes_received] = '\0';
+        full_msg += buffer;
+
+        std::cout << "Received raw RESP:\n" << full_msg;
+
+        std::vector<std::string> parts = parse_resp(full_msg);
+
+        if (!parts.empty()) {
+            if (parts[0] == "ECHO" && parts.size() == 2) {
+                const std::string& message = parts[1];
+                std::string response = "$" + std::to_string(message.size()) + "\r\n" + message + "\r\n";
+                send(client_fd, response.c_str(), response.size(), 0);
+            } else {
+                std::string error = "-ERR unknown command\r\n";
+                send(client_fd, error.c_str(), error.size(), 0);
+            }
+        }
+
+        full_msg.clear();  // Reset to allow new command in next recv()
     }
 
-    std::cout << "Received:\n" << full_msg;
-    std::cout << "Found " << count << " PING command(s)\n";
-
-    // Send back "PONG" that many times
-    for (size_t i = 0; i < count; ++i) {
-      std::string response = "+PONG\r\n";
-      send(client_fd, response.c_str(), response.size(), 0);
-    }
-
-    full_msg.clear();  // reset to handle next round of input
-  }
-
-  close(client_fd);
-} 
+    close(client_fd);
+}
 
 int main(int argc, char **argv) {
   std::cout << std::unitbuf;
