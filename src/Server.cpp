@@ -7,7 +7,42 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <netdb.h>
-#include <algorithm> // for std::count
+#include <algorithm>
+#include <thread>
+#include <bits/stdc++.h>
+
+void handle_client(int client_fd)
+{
+  char buffer[1024];
+  std::string full_msg;
+  int bytes_received;
+  std::cout << "Waiting for RESP input...\n";
+  while ((bytes_received = recv(client_fd, buffer, sizeof(buffer) - 1, 0)) > 0) {
+    buffer[bytes_received] = '\0';
+    full_msg += buffer;
+
+    // Count how many times "PING" appears
+    size_t count = 0;
+    size_t pos = 0;
+    while ((pos = full_msg.find("PING", pos)) != std::string::npos) {
+      ++count;
+      pos += 4;
+    }
+
+    std::cout << "Received:\n" << full_msg;
+    std::cout << "Found " << count << " PING command(s)\n";
+
+    // Send back "PONG" that many times
+    for (size_t i = 0; i < count; ++i) {
+      std::string response = "+PONG\r\n";
+      send(client_fd, response.c_str(), response.size(), 0);
+    }
+
+    full_msg.clear();  // reset to handle next round of input
+  }
+
+  close(client_fd);
+} 
 
 int main(int argc, char **argv) {
   std::cout << std::unitbuf;
@@ -40,43 +75,23 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  struct sockaddr_in client_addr;
-  socklen_t client_addr_len = sizeof(client_addr);
-  std::cout << "Waiting for a client to connect...\n";
-  std::cout << "Logs from your program will appear here!\n";
+ while (true) 
+ {
+      struct sockaddr_in client_addr;
+      socklen_t client_len = sizeof(client_addr);
+      int client_fd = accept(server_fd, (struct sockaddr*)&client_addr, &client_len);
+      if (client_fd < 0) {
+          std::cerr << "Failed to accept client\n";
+          continue;
+      }
 
-  int client_fd = accept(server_fd, (struct sockaddr *) &client_addr, &client_addr_len);
-  std::cout << "Client connected\n";
+      std::cout << "Accepted client: fd " << client_fd << "\n";
 
-  char buffer[1024];
-  std::string full_msg;
-  int bytes_received;
-  std::cout << "Waiting for RESP input...\n";
-  while ((bytes_received = recv(client_fd, buffer, sizeof(buffer) - 1, 0)) > 0) {
-    buffer[bytes_received] = '\0';
-    full_msg += buffer;
-
-    // Count how many times "PING" appears
-    size_t count = 0;
-    size_t pos = 0;
-    while ((pos = full_msg.find("PING", pos)) != std::string::npos) {
-      ++count;
-      pos += 4;
-    }
-
-    std::cout << "Received:\n" << full_msg;
-    std::cout << "Found " << count << " PING command(s)\n";
-
-    // Send back "PONG" that many times
-    for (size_t i = 0; i < count; ++i) {
-      std::string response = "+PONG\r\n";
-      send(client_fd, response.c_str(), response.size(), 0);
-    }
-
-    full_msg.clear();  // reset to handle next round of input
+      // Spawn a new thread for each client
+      std::thread(handle_client, client_fd).detach();
   }
 
-  close(client_fd);
+  
   close(server_fd);
   return 0;
 }
