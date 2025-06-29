@@ -7,6 +7,7 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <netdb.h>
+#include <algorithm> // for std::count
 
 int main(int argc, char **argv) {
   std::cout << std::unitbuf;
@@ -34,8 +35,7 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  int connection_backlog = 5;
-  if (listen(server_fd, connection_backlog) != 0) {
+  if (listen(server_fd, 5) != 0) {
     std::cerr << "listen failed\n";
     return 1;
   }
@@ -55,23 +55,28 @@ int main(int argc, char **argv) {
   while ((bytes_received = recv(client_fd, buffer, sizeof(buffer) - 1, 0)) > 0) {
     buffer[bytes_received] = '\0';
     full_msg += buffer;
-    // crude end check for this simple case (PING ends in \r\n)
-    if (full_msg.find("\r\n") != std::string::npos) break;
-  }
 
-  if (full_msg.empty()) {
-    std::cerr << "No data received from client.\n";
-  } else {
-    std::cout << "Received: " << full_msg << "\n";
-    if (full_msg.find("PING") != std::string::npos) {
+    // Count how many times "PING" appears
+    size_t count = 0;
+    size_t pos = 0;
+    while ((pos = full_msg.find("PING", pos)) != std::string::npos) {
+      ++count;
+      pos += 4;
+    }
+
+    std::cout << "Received:\n" << full_msg;
+    std::cout << "Found " << count << " PING command(s)\n";
+
+    // Send back "PONG" that many times
+    for (size_t i = 0; i < count; ++i) {
       std::string response = "+PONG\r\n";
       send(client_fd, response.c_str(), response.size(), 0);
     }
-  }
 
+    full_msg.clear();  // reset to handle next round of input
+  }
 
   close(client_fd);
   close(server_fd);
-
   return 0;
 }
