@@ -90,7 +90,7 @@ void handle_client(int client_fd) {
                 string value = parts[2];
                 Entry entry{value};
 
-                if (parts.size() == 5 && parts[3] == "PX") {
+                if (parts.size() == 5 && parts[3] == "px") {
                     int ttl = std::stoi(parts[4]);
                     entry.has_expiry = true;
                     entry.expiry_time = steady_clock::now() + milliseconds(ttl);
