@@ -102,24 +102,27 @@ void handle_client(int client_fd) {
                 }
 
                 response = "+OK\r\n";
-            }  else if (parts[0] == "GET" && parts.size() == 2) {
+            } else if (parts[0] == "GET" && parts.size() == 2) {
                 string key = parts[1];
                 lock_guard<mutex> lock(kv_mutex);
 
                 auto it = kv_store.find(key);
                 if (it != kv_store.end()) {
                     Entry& entry = it->second;
-                    if (entry.has_expiry && steady_clock::now() > entry.expiry_time) {
-                        kv_store.erase(it);  // Key has expired
+
+                    // If key has expired, remove and return null
+                    if (entry.has_expiry && steady_clock::now() >= entry.expiry_time) {
+                        kv_store.erase(it);
                         response = "$-1\r\n";  // Null bulk string
                     } else {
                         const string& val = entry.value;
                         response = "$" + std::to_string(val.size()) + "\r\n" + val + "\r\n";
                     }
                 } else {
-                    response = "$-1\r\n";  // Null bulk string if key doesn't exist
+                    response = "$-1\r\n";  // Key not found => null bulk string
                 }
-            }            
+            }
+            
             else {
                 response = "-ERR unknown command\r\n";
             }
