@@ -102,7 +102,7 @@ void handle_client(int client_fd) {
                 }
 
                 response = "+OK\r\n";
-            } else if (parts[0] == "GET" && parts.size() == 2) {
+            }  else if (parts[0] == "GET" && parts.size() == 2) {
                 string key = parts[1];
                 lock_guard<mutex> lock(kv_mutex);
 
@@ -119,9 +119,8 @@ void handle_client(int client_fd) {
                 } else {
                     response = "$-1\r\n";  // Null bulk string if key doesn't exist
                 }
-            }
-
-            } else {
+            }            
+            else {
                 response = "-ERR unknown command\r\n";
             }
 
