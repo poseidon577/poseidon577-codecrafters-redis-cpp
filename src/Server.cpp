@@ -110,15 +110,17 @@ void handle_client(int client_fd) {
                 if (it != kv_store.end()) {
                     Entry& entry = it->second;
                     if (entry.has_expiry && steady_clock::now() > entry.expiry_time) {
-                        kv_store.erase(it);
-                        response = "$-1\r\n";  // expired
+                        kv_store.erase(it);  // Key has expired
+                        response = "$-1\r\n";  // Null bulk string
                     } else {
                         const string& val = entry.value;
                         response = "$" + std::to_string(val.size()) + "\r\n" + val + "\r\n";
                     }
                 } else {
-                    response = "$-1\r\n";  // key not found
+                    response = "$-1\r\n";  // Null bulk string if key doesn't exist
                 }
+            }
+
             } else {
                 response = "-ERR unknown command\r\n";
             }
