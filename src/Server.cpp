@@ -137,16 +137,36 @@ bool loadFromRDB(const string& dir, const string& dbfilename) {
         readByte(file); readString(file); readString(file);
     }
 
+    steady_clock::time_point now = steady_clock::now();
     while (file.peek() != EOF) {
         uint8_t type = readByte(file);
+
         if (type == 0xFE) {
             readSize(file); // DB index
         } else if (type == 0xFB) {
             readSize(file); readSize(file); // hash sizes
-        } else if (type == 0xFC) {
-            readLE8(file); // ms expire, skip
-        } else if (type == 0xFD) {
-            readLE4(file); // s expire, skip
+        } else if (type == 0xFC) { // expire in ms
+            uint64_t expiry_ts = readLE8(file);
+            type = readByte(file);
+            if (type == 0x00) {
+                string key = readString(file);
+                string value = readString(file);
+                lock_guard<mutex> lock(kv_mutex);
+                kv_store[key] = value;
+                auto duration = milliseconds(expiry_ts - duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count());
+                expiry_map[key] = now + duration;
+            }
+        } else if (type == 0xFD) { // expire in s
+            uint32_t expiry_ts = readLE4(file);
+            type = readByte(file);
+            if (type == 0x00) {
+                string key = readString(file);
+                string value = readString(file);
+                lock_guard<mutex> lock(kv_mutex);
+                kv_store[key] = value;
+                auto duration = seconds(expiry_ts - duration_cast<seconds>(system_clock::now().time_since_epoch()).count());
+                expiry_map[key] = now + duration;
+            }
         } else if (type == 0x00) { // string type
             string key = readString(file);
             string value = readString(file);
@@ -162,7 +182,6 @@ bool loadFromRDB(const string& dir, const string& dbfilename) {
 
     return true;
 }
-
 void handle_client(int client_fd) {
     char buffer[1024];
     string full_msg;
