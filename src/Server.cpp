@@ -137,22 +137,29 @@ bool loadFromRDB(const string& dir, const string& dbfilename) {
         readByte(file); readString(file); readString(file);
     }
 
-    if (readByte(file) != 0xFE) return false;
-    readSize(file);
+    while (file.peek() != EOF) {
+        uint8_t type = readByte(file);
+        if (type == 0xFE) {
+            readSize(file); // DB index
+        } else if (type == 0xFB) {
+            readSize(file); readSize(file); // hash sizes
+        } else if (type == 0xFC) {
+            readLE8(file); // ms expire, skip
+        } else if (type == 0xFD) {
+            readLE4(file); // s expire, skip
+        } else if (type == 0x00) { // string type
+            string key = readString(file);
+            string value = readString(file);
+            lock_guard<mutex> lock(kv_mutex);
+            kv_store[key] = value;
+        } else if (type == 0xFF) {
+            break; // end of RDB
+        } else {
+            cerr << "Unknown RDB entry type: " << hex << (int)type << endl;
+            break;
+        }
+    }
 
-    if (readByte(file) != 0xFB) return false;
-    readSize(file); readSize(file);
-
-    uint8_t next = file.peek();
-    if (next == 0xFC) { readByte(file); readLE8(file); }
-    else if (next == 0xFD) { readByte(file); readLE4(file); }
-
-    if (readByte(file) != 0x00) return false;
-
-    string key = readString(file);
-    string value = readString(file);
-    lock_guard<mutex> lock(kv_mutex);
-    kv_store[key] = value;
     return true;
 }
 
